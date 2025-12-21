@@ -36,4 +36,4 @@ function loadModel(url, position, scale = 1) {
   });
 }
 
-loadModel('./models/tokyo_tower/scene.gltf', new THREE.Vector3(0, 0, 0), 0.8);
+loadModel('./public/models/tokyo_tower/scene.gltf', new THREE.Vector3(0, 0, 0), 0.8);
