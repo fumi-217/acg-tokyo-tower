@@ -1,0 +1,11 @@
+Model Information:
+* title:	Le Millefiori
+* source:	https://sketchfab.com/3d-models/le-millefiori-34bdee9a8de34a68884e3e7d17925fe2
+* author:	Karumaki (https://sketchfab.com/Karumaki)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Le Millefiori" (https://sketchfab.com/3d-models/le-millefiori-34bdee9a8de34a68884e3e7d17925fe2) by Karumaki (https://sketchfab.com/Karumaki) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
