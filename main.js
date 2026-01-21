@@ -88,6 +88,45 @@ skyUniforms['mieDirectionalG'].value = 0.8;
 
 const sun = new THREE.Vector3();
 
+function createSunSprite() {
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d');
+
+  const g = ctx.createRadialGradient(
+    size / 2, size / 2, 0,
+    size / 2, size / 2, size / 2
+  );
+
+  g.addColorStop(0.0, 'rgba(255,255,255,1.0)');
+  g.addColorStop(0.3, 'rgba(255,240,200,0.95)');
+  g.addColorStop(0.6, 'rgba(255,200,120,0.5)');
+  g.addColorStop(1.0, 'rgba(255,180,80,0.0)');
+
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+
+  const mat = new THREE.SpriteMaterial({
+    map: tex,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(100, 100, 1); 
+  sprite.renderOrder = 1000;
+
+  return sprite;
+}
+const sunSprite = createSunSprite();
+scene.add(sunSprite);
+
+
 function setSunByElevationAzimuth(elevationDeg, azimuthDeg){
   const phi = THREE.MathUtils.degToRad(90 - elevationDeg);
   const theta = THREE.MathUtils.degToRad(azimuthDeg);
@@ -99,6 +138,7 @@ function setSunByElevationAzimuth(elevationDeg, azimuthDeg){
   directionalLight.target.position.set(0,0,0);
   directionalLight.target.updateMatrixWorld();
 }
+
 
 //ocean
 
@@ -415,10 +455,14 @@ function setTimeOfDay(mode) {
       mieG: 0.78,
 
       elev: 50,
-      azim: 240,
+      azim: 160,
 
       fogDensity: 0.00022,
       fogColor: new THREE.Color(0xb8d2f0),
+      
+      hemiInt:0.35,
+      hemiSky: new THREE.Color(0xcfe8ff),
+      hemiGround: new THREE.Color(0x2a2a2a),
 
       stars: 0.0,
     }, 2.0);
@@ -560,6 +604,13 @@ function updateSkyAndLights() {
 
 
   setSunByElevationAzimuth(current.elev, current.azim);
+ 
+  
+  const sunDist = 1200; 
+  sunSprite.position.copy(camera.position).addScaledVector(sun, sunDist);
+  sunSprite.quaternion.copy(camera.quaternion);
+  sunSprite.material.opacity = THREE.MathUtils.clamp(current.sunInt * 1.2, 0.0, 1.0);
+
 
   if(water){
     const delta = clock.getDelta();
