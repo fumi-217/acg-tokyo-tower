@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import {Sky} from 'three/addons/objects/Sky.js';
 import {Water} from 'three/addons/objects/Water.js';
+import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 
 // Create the 3D scene
 const scene = new THREE.Scene();
@@ -59,8 +60,50 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
 
-// Add ambient light for overall scene illumination (60% brightness)
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+//shadow
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+
+// IBL / Environment 
+const pmrem = new THREE.PMREMGenerator(renderer);
+pmrem.compileEquirectangularShader();
+
+let envMap = null;
+const lighting = { ibl: 1.2 }; 
+
+new RGBELoader()
+  .setPath('/hdr/')
+  .load('kloofendal_48d_partly_cloudy_puresky_4k.hdr', (hdrTex) => {
+    envMap = pmrem.fromEquirectangular(hdrTex).texture;
+    hdrTex.dispose();
+
+    scene.environment = envMap;
+
+    // Keep pmrem if you may load another HDR later; otherwise disposing is fine
+    // pmrem.dispose();
+  }, undefined, (err) => {
+    console.error('HDR load failed:', err);
+  });
+
+function applyIBLIntensity(intensity) {
+  scene.traverse((o) => {
+    if (!o.isMesh) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    for (const m of mats) {
+      if (!m) continue;
+      if (m.isMeshStandardMaterial || m.isMeshPhysicalMaterial) {
+        m.envMapIntensity = intensity;
+        m.needsUpdate = true;
+      }
+    }
+  });
+}
+
+
+
+// Add ambient light for overall scene illumination (18% brightness)
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.18);
 scene.add(ambientLight);
 
 // Add directional light to simulate sunlight
@@ -69,6 +112,22 @@ directionalLight.position.set(5, 10, 5);
 scene.add(directionalLight);
 directionalLight.target.position.set(0,0,0);
 scene.add(directionalLight.target);
+//castshadow
+directionalLight.castShadow = true;
+directionalLight.shadow.mapSize.set(1024, 1024);
+directionalLight.shadow.bias = -0.0003;
+//shadow camera frustum
+const d = 600; // range
+directionalLight.shadow.camera.left   = -d;
+directionalLight.shadow.camera.right  =  d;
+directionalLight.shadow.camera.top    =  d;
+directionalLight.shadow.camera.bottom = -d;
+
+directionalLight.shadow.camera.near = 1;
+directionalLight.shadow.camera.far  = 2500;
+
+directionalLight.shadow.normalBias = 0.02;
+
 
 //hemispherelight
 const hemi = new THREE.HemisphereLight(0xffffff, 0x202020, 0.0);
@@ -335,6 +394,17 @@ function ensureStars(){
   return stars;
 }
 
+//ground
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(4000, 4000),
+  new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 1.0, metalness: 0.0 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.position.set(0, 0.01, 0);      
+ground.scale.set(1, 1, 1);            
+ground.receiveShadow = true;
+scene.add(ground);
+
 
 const current = {
   exposure: 0.65,
@@ -359,6 +429,13 @@ const current = {
 };
 
 let transition = null; // { from, to, t0, dur }
+
+const towerLightState = { cur: 0.0 };
+
+const towerLight = new THREE.PointLight(0xffc08a, 0.0, 600, 1.0);
+towerLight.position.set(0, 140, 0);   
+scene.add(towerLight);
+
 
 function startTransition(to, duration = 2.0) {
   transition = {
@@ -423,30 +500,31 @@ function setTimeOfDay(mode) {
       sunInt: 0.60,
       sunKelvin: 3200,
 
-      turbidity: 14,
-      rayleigh: 2.8,
-      mieC: 0.018,
-      mieG: 0.95,
+      turbidity: 10,
+      rayleigh: 2.2,
+      mieC: 0.010,
+      mieG: 0.90,
 
       elev: 3.0,
-      azim: 200,
+      azim: 170,
 
       hemiInt: 0.55,
       hemiSky: new THREE.Color(0xffc3a0),
       hemiGround: new THREE.Color(0x0b1020),
 
-      fogDensity:0.00010,
+      fogDensity:0.00035,
       fogColor:new THREE.Color(0x142033),
 
       stars: 0.0,
     }, 2.5); 
+    lighting.ibl = 0.25;
   }
 
   if (mode === 'day') {
     startTransition({
       exposure: 0.3,
-      amb: 0.4,
-      sunInt: 0.8,
+      amb: 0.18,
+      sunInt: 3.0,
       sunKelvin: 6500,
 
       turbidity: 6,
@@ -454,10 +532,10 @@ function setTimeOfDay(mode) {
       mieC: 0.0025,
       mieG: 0.78,
 
-      elev: 50,
-      azim: 160,
+      elev: 55,
+      azim: 0,
 
-      fogDensity: 0.00022,
+      fogDensity: 0.00008,
       fogColor: new THREE.Color(0xb8d2f0),
       
       hemiInt:0.35,
@@ -466,25 +544,31 @@ function setTimeOfDay(mode) {
 
       stars: 0.0,
     }, 2.0);
+    lighting.ibl = 0.55;
   }
 
   if (mode === 'night') {
     startTransition({
-      exposure: 0.28,
-      amb: 0.03,
-      sunInt: 0.0,
-      sunKelvin: 2000,
-
+      exposure: 0.22,   
+      amb: 0.05,        
+      sunInt: 0.08,     
+      sunKelvin: 9000,  
       turbidity: 1.2,
       rayleigh: 0.02,
       mieC: 0.0002,
       mieG: 0.7,
-
-      elev: -35,
+      elev: -25,
       azim: 180,
-
+      hemiInt: 0.08,                 
+      hemiSky: new THREE.Color(0x6a88ff),    
+      hemiGround: new THREE.Color(0x090b12), 
       stars: 1.0,
+      fogDensity: 0.0008,
+      fogColor: new THREE.Color(0x0b1020),
     }, 3.0);
+
+  
+    lighting.ibl = 0.03;  
   }
 }
 
@@ -527,6 +611,8 @@ function animate() {
   renderer.render( scene, camera );
 }
 function updateSkyAndLights() {
+  if (envMap) scene.environment = envMap;
+
   if (transition) {
     const now = performance.now();
     let t = (now - transition.t0) / transition.dur;
@@ -611,9 +697,9 @@ function updateSkyAndLights() {
   sunSprite.quaternion.copy(camera.quaternion);
   sunSprite.material.opacity = THREE.MathUtils.clamp(current.sunInt * 1.2, 0.0, 1.0);
 
-
+  const delta = clock.getDelta();
   if(water){
-    const delta = clock.getDelta();
+    
 
     water.material.uniforms['time'].value += delta * 0.10;
 
@@ -631,10 +717,61 @@ function updateSkyAndLights() {
     s.material.uniforms.uTime.value = performance.now() * 0.001; 
   }
   if (stars) stars.position.copy(camera.position);
+  applyIBLIntensity(lighting.ibl);
+  // ---- target intensity  ----
+  const towerTarget =
+    current.stars > 0.5 ? 0.55 :   // night
+    current.elev < 6.0  ? 0.30 :   // sunset
+                          0.00;    // day
+
+  // ---- smooth follow  ----                
+  const speed = 2.2;                          
+  const k = 1.0 - Math.exp(-speed * delta);       
+  towerLightState.cur += (towerTarget - towerLightState.cur) * k;
+
+  // ---- apply to tower ----
+  scene.traverse((o) => {
+    if (!o.isGroup || !o.userData.isTokyoTower) return;
+
+    o.traverse((msh) => {
+      if (!msh.isMesh) return;
+      const mats = Array.isArray(msh.material) ? msh.material : [msh.material];
+
+      for (const mat of mats) {
+        if (!mat || !mat.emissive) continue;
+        const towerOpacity = 1.0;
+        const shaped = Math.pow(THREE.MathUtils.clamp(towerLightState.cur, 0, 1),2.0);
+        mat.emissiveIntensity = shaped * towerOpacity;
+
+      }
+    });
+  });
+  const g = Math.pow(THREE.MathUtils.clamp(towerLightState.cur, 0, 1), 2.2);
+  const glowOpacity = THREE.MathUtils.clamp(g * 0.18, 0.0, 0.18);
+
+  scene.traverse((o) => {
+    if (!o.isGroup || !o.userData.isTokyoTower) return;
+
+    const glow = o.userData.towerGlow;
+    if (glow) glow.material.opacity = glowOpacity;
+  });
+  const maxPoint =
+    current.stars > 0.5 ? 1.0 :
+    current.elev < 6.0  ? 0.5 :
+                          0.0;
+
+  towerLight.intensity = towerLightState.cur * maxPoint;
+
+  scene.traverse((o) => {
+    if (!o.isGroup || !o.userData.isTokyoTower) return;
+    const glow = o.userData.towerGlow;
+    if (glow) glow.quaternion.copy(camera.quaternion);
+  });
+
+
 }
 
-// Initialize GLTF model loader
-const loader = new GLTFLoader();
+
 
 /**
  * Load and position a GLTF/GLB 3D model in the scene
@@ -643,43 +780,253 @@ const loader = new GLTFLoader();
  * @param {number} scale - Uniform scale multiplier (1 = original size)
  * @param {number} rotationY - Y-axis rotation in radians (0 to Math.PI*2)
  */
-function loadModel(url, position, scale = 1, rotationY = 0) {
-  loader.load(url, (gltf) => {
-    const model = gltf.scene;
-    
-    // Calculate model's bounding box in its original local space
-    const box = new THREE.Box3().setFromObject(model);
-    const center = box.getCenter(new THREE.Vector3());
-    
-    // Center the model horizontally (X/Z) and align bottom to Y=0
-    model.position.set(-center.x, -box.min.y, -center.z);
-    
-    // Wrap model in a group for easier transform control
-    const group = new THREE.Group();
-    group.add(model);
-    
-    // Apply transformations to the group
-    group.scale.setScalar(scale);           // Uniform scale
-    group.position.copy(position);           // World position
-    group.rotation.y = rotationY;            // Y-axis rotation
-    
-    // Store metadata for reference
-    group.userData.name = url.split('/').pop().replace('.gltf', '');
-    group.userData.originalScale = scale;
-    
-    // Add to scene
-    scene.add(group);
-    
-    // Log model info to console
-    const finalBox = new THREE.Box3().setFromObject(group);
-    console.log(`[GLTF] Loaded: ${url.split('/').pop()}`, { 
-      worldPosition: group.position.clone(),
-      scale,
-      rotationY,
-      size: finalBox.getSize(new THREE.Vector3())
-    });
-  });
+function baseDirFromUrl(url) {
+  return url.slice(0, url.lastIndexOf('/') + 1);
 }
+
+function loadModel(url, position, scale = 1, rotationY = 0) {
+  const baseDir = baseDirFromUrl(url);
+
+  const manager = new THREE.LoadingManager();
+
+  // ---------- log helpers ----------
+  const logGroup = (title, fn) => {
+    console.groupCollapsed(title);
+    try { fn?.(); } finally { console.groupEnd(); }
+  };
+
+  manager.onError = (u) => {
+    console.error(
+      `[LoadingManager] failed\n` +
+      `  url: ${u}\n` +
+      `  baseDir: ${baseDir}`
+    );
+  };
+
+  // ---------- URL modifier ----------
+  manager.setURLModifier((requestedURL) => {
+    // Allow embedded and remote resources
+    if (/^(data:|blob:|https?:)/i.test(requestedURL)) {
+      return requestedURL;
+    }
+
+    // Allow absolute paths
+    if (requestedURL.startsWith('/')) {
+      return requestedURL;
+    }
+
+    // Resolve relative paths against model directory
+    const fixed = baseDir + requestedURL;
+
+    logGroup(`[URLModifier] ${url.split('/').pop()}`, () => {
+      console.log(`requested:\n  ${requestedURL}`);
+      console.log(`resolved:\n  ${fixed}`);
+    });
+
+    return fixed;
+  });
+
+  const loader = new GLTFLoader(manager);
+  loader.setResourcePath(baseDir);
+
+  loader.load(
+    url,
+    (gltf) => {
+      const model = gltf.scene;
+
+      // ---------- texture inspection ----------
+      const textureSlots = [
+        'map',
+        'normalMap',
+        'roughnessMap',
+        'metalnessMap',
+        'aoMap',
+        'emissiveMap',
+        'alphaMap'
+      ];
+
+      logGroup(`[GLTF] Material inspection\n  ${url}`, () => {
+        model.traverse((o) => {
+          if (!o.isMesh) return;
+
+          const materials = Array.isArray(o.material)
+            ? o.material
+            : [o.material];
+
+          materials.forEach((m, i) => {
+            if (!m) return;
+
+            const usedSlots = textureSlots.filter(k => !!m[k]);
+            const hasExtensions =
+              m.userData &&
+              m.userData.gltfExtensions &&
+              Object.keys(m.userData.gltfExtensions).length > 0;
+
+            if (usedSlots.length === 0 && !hasExtensions) {
+              console.log(
+                `[NO TEX] ${o.name} (mat ${i}) ${m.type}`
+              );
+            } else {
+              console.log(
+                `[TEX OK] ${o.name} (mat ${i}) ${m.type}\n` +
+                `  slots: ${usedSlots.length ? usedSlots.join(', ') : '(none)'}\n` +
+                `  extensions: ${hasExtensions
+                  ? Object.keys(m.userData.gltfExtensions).join(', ')
+                  : '(none)'}`
+              );
+            }
+          });
+        });
+      });
+
+      // ---------- glTF metadata ----------
+      const usedExt = gltf.parser.json.extensionsUsed || [];
+      if (usedExt.includes('KHR_materials_pbrSpecularGlossiness')) {
+        console.warn(
+          `[SpecGloss model]\n` +
+          `  url: ${url}\n` +
+          `  extensionsUsed: ${usedExt.join(', ')}`
+        );
+      }
+
+      const images = gltf.parser.json.images || [];
+      console.log(
+        `[IMAGES]\n` +
+        `  url: ${url}\n` +
+        `  images:\n` +
+        `  ${images.length ? images.map(i => i.uri).join('\n  ') : '(none)'}`
+      );
+
+      // ---------- centering and placement ----------
+      const box = new THREE.Box3().setFromObject(model);
+      const center = box.getCenter(new THREE.Vector3());
+
+      model.position.set(-center.x, -box.min.y, -center.z);
+
+      const group = new THREE.Group();
+      group.add(model);
+
+      group.scale.setScalar(scale);
+      group.position.copy(position);
+      group.rotation.y = rotationY;
+
+      model.traverse((o) => {
+        if (!o.isMesh) return;
+        o.castShadow = true;
+        o.receiveShadow = true;
+      });
+      if (url.includes('/models/tokyo_tower/')) {
+        model.traverse((o) => {
+          if (!o.isMesh) return;
+          const mats = Array.isArray(o.material) ? o.material : [o.material];
+          for (const m of mats) {
+            if (!m || !(m.isMeshStandardMaterial || m.isMeshPhysicalMaterial)) continue;
+
+            
+            m.emissive = new THREE.Color(0xffb36b);
+            m.emissiveIntensity = 0.0; 
+            m.needsUpdate = true;
+          }
+        });
+        const glow = createSunSprite();               
+        glow.scale.set(220, 220, 1);                  
+        glow.material.depthWrite = false;
+        glow.material.opacity = 0.0;                  
+        glow.renderOrder = 999;
+        group.add(glow);
+        glow.position.set(0, 120, 0);   
+        glow.material.depthTest = false; 
+        glow.renderOrder = 9999;
+
+        group.userData.towerGlow = glow;             
+        group.userData.isTokyoTower = true;
+      }
+
+    
+
+      group.userData.name = url.split('/').pop();
+      group.userData.originalScale = scale;
+
+      // Apply one-time material fixes
+      model.traverse((o) => {
+        if (!o.isMesh) return;
+        const materials = Array.isArray(o.material) ? o.material : [o.material];
+
+        for (const m of materials) {
+          if (!m) continue;
+
+          // BaseColor maps should be sRGB
+          if (m.map) m.map.colorSpace = THREE.SRGBColorSpace;
+
+          // Normal/ORM maps should stay linear (default is fine)
+          // if (m.normalMap) m.normalMap.colorSpace = THREE.NoColorSpace;
+
+          // Environment intensity for PBR materials
+          if (m.isMeshStandardMaterial || m.isMeshPhysicalMaterial) {
+            m.envMapIntensity = lighting.ibl;
+          }
+
+          m.needsUpdate = true;
+        }
+      });
+
+      // Model-specific fixes
+      if (url.includes('/models/le_millefiori/')) {
+        // SpecGloss-converted materials often need a boost
+        model.traverse((o) => {
+          if (!o.isMesh) return;
+          const materials = Array.isArray(o.material) ? o.material : [o.material];
+          for (const m of materials) {
+            if (!m) continue;
+            if (m.isMeshStandardMaterial || m.isMeshPhysicalMaterial) {
+              m.envMapIntensity = Math.max(m.envMapIntensity ?? 1.0, 1.6);
+              // Optional: reduce roughness slightly if it looks too flat
+              // m.roughness = Math.min(m.roughness ?? 1.0, 0.85);
+              m.needsUpdate = true;
+            }
+          }
+        });
+      }
+
+      if (url.includes('/models/mori_building/')) {
+        // Mori GLB may look dull if exposure is low; keep textures correct and boost env a bit
+        model.traverse((o) => {
+          if (!o.isMesh) return;
+          const materials = Array.isArray(o.material) ? o.material : [o.material];
+          for (const m of materials) {
+            if (!m) continue;
+            if (m.map) m.map.colorSpace = THREE.SRGBColorSpace;
+            if (m.isMeshStandardMaterial || m.isMeshPhysicalMaterial) {
+              m.envMapIntensity = Math.max(m.envMapIntensity ?? 1.0, 1.4);
+              m.needsUpdate = true;
+            }
+          }
+        });
+      }
+
+
+      scene.add(group);
+
+      const finalBox = new THREE.Box3().setFromObject(group);
+      console.log(`[GLTF] Loaded ${group.userData.name}`, {
+        position: group.position.clone(),
+        scale,
+        rotationY,
+        size: finalBox.getSize(new THREE.Vector3())
+      });
+    },
+    undefined,
+    (err) => {
+      console.error(
+        `[GLTFLoader] load failed\n` +
+        `  url: ${url}`,
+        err
+      );
+    }
+  );
+}
+
+
 
 // ============================================
 // MODEL PLACEMENT
@@ -700,7 +1047,8 @@ loadModel('/models/building_no_19_form_tokyo_otemachi_building_pack_gltf/scene.g
 // High-rise buildings scattered around
 loadModel('/models/hi_rise_apartment_building/scene.gltf', new THREE.Vector3(100, 0, -10), 0.007);
 loadModel('/models/high_rise_building_gltf/scene.gltf', new THREE.Vector3(60, 0, -10), 1);
-loadModel('/models/le_millefiori/scene.gltf', new THREE.Vector3(-120, 0, -40), 0.02);
+loadModel('/models/le_millefiori/scene_mr.gltf', new THREE.Vector3(-120, 0, -40), 0.02);
+
 
 // Hotels with various rotations
 loadModel('/models/marriott_hotel_3_wtc_gltf/scene.gltf', new THREE.Vector3(120, 0, -50), 0.4, Math.PI * 1.3);

@@ -1,0 +1,11 @@
+## Third-party assets
+
+### HDR environment
+- Source: Poly Haven — "kloofendal_48d_partly_cloudy_puresky"
+- License: CC0
+- Link: https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky
+
+### Water normal / flow textures
+- Source: three.js examples textures (water)
+- License: MIT (three.js)
+- Link: https://github.com/mrdoob/three.js
