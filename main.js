@@ -563,7 +563,7 @@ function setTimeOfDay(mode) {
       hemiSky: new THREE.Color(0x6a88ff),    
       hemiGround: new THREE.Color(0x090b12), 
       stars: 1.0,
-      fogDensity: 0.0008,
+      fogDensity: 0.0004,
       fogColor: new THREE.Color(0x0b1020),
     }, 3.0);
 
@@ -713,7 +713,7 @@ function updateSkyAndLights() {
   }
   const s = ensureStars();
   if (s) {
-    s.material.uniforms.uOpacity.value = current.stars;
+    s.material.uniforms.uOpacity.value = current.stars*1.3;
     s.material.uniforms.uTime.value = performance.now() * 0.001; 
   }
   if (stars) stars.position.copy(camera.position);
