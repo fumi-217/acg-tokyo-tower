@@ -679,64 +679,93 @@ camera.setViewOffset(
 function animate() {
   updateSkyAndLights();
 
+  // === 1. 基础时间与状态计算 (必须放在最前面!) ===
   const time = performance.now() * 0.001; 
 
-  // decide time
+  // 根据星星浓度和太阳高度判断当前时段
+  // current.stars 和 current.elev 是 main.js 里的全局变量
   const isNight = THREE.MathUtils.smoothstep(current.stars, 0.0, 0.5); 
   const isSunset = (1.0 - isNight) * THREE.MathUtils.smoothstep(10 - current.elev, 0.0, 5.0); 
-  // const isDay = 1.0 - Math.max(isNight, isSunset); 
+  // const isDay = 1.0 - Math.max(isNight, isSunset); // 暂时没用到，但保留也没事
 
-  // light effect for windows of buildings
+  // === 2. 建筑窗户光效 (Shader 逻辑) ===
+  // 更新时间，让窗户光有轻微呼吸感/闪烁感
   cityLightUniforms.uTime.value = time;
+
+  // 计算建筑灯光的目标强度
+  // 傍晚(isSunset)开一半，晚上(isNight)开全亮(1.5倍)
   const targetBuildingIntensity = (isSunset * 0.5 + isNight * 1.5);
   
+  // 平滑过渡 (Lerp): 让光强慢慢变化，而不是瞬间跳变
   const curInt = cityLightUniforms.uLightIntensity.value;
   cityLightUniforms.uLightIntensity.value += (targetBuildingIntensity - curInt) * 0.05;
 
-  // color change
+  // 窗户颜色切换: 傍晚暖黄 -> 深夜冷白/淡黄
   if (isSunset > 0.5) {
      cityLightUniforms.uWindowColor.value.setHex(0xffaa55); 
   } else {
      cityLightUniforms.uWindowColor.value.setHex(0xffddaa); 
   }
+
+  // === 3. 东京塔与桥梁光效 (保留之前的 Emissive 逻辑) ===
   
-  // Tokyo Tower lights
-  const towerPulse = Math.sin(time * 2.0) * 0.5 + 0.5; 
-  const towerSunsetColor = new THREE.Color(0xff8800);  
-  const towerNightColor = new THREE.Color(0xff0000);   
+  // -- A. 东京塔逻辑 --
+  const towerPulse = Math.sin(time * 2.0) * 0.5 + 0.5; // 呼吸波
+  const towerSunsetColor = new THREE.Color(0xff8800);  // 傍晚橙
+  const towerNightColor = new THREE.Color(0xff0000);   // 深夜红
   
+  // 颜色插值
   const towerTargetColor = new THREE.Color().copy(towerSunsetColor).lerp(towerNightColor, isNight);
   
+  // 强度计算
   let towerIntensity = 0;
   if (isSunset > 0.1) towerIntensity += isSunset * 0.6;
   if (isNight > 0.1)  towerIntensity += isNight * (0.8 + towerPulse * 0.4);
 
+
+
+  // === 4. 应用光效到具体物体 ===
   scene.traverse((o) => {
+    // 4.1 设置塔的辉光 Sprite (如果存在)
     if (o.userData.type === 'tower' && o.userData.towerGlow) {
       o.userData.towerGlow.material.opacity = towerIntensity * 0.6;
       o.userData.towerGlow.material.color.copy(towerTargetColor);
     }
 
-    // light animation for Tokyo Tower
+    // === 【新增】控制东京塔的点光源 ===
     if (o.userData.type === 'tower' && o.userData.towerPointLights) {
         const lights = o.userData.towerPointLights;
         
+        // 适当调整基础亮度 (因为现在每层有4个灯叠加，不需要太亮)
+        // 晚上 towerIntensity 约为 1.0 左右
         const plBaseIntensity = towerIntensity * 30000; 
 
         lights.forEach((pl) => {
+            // 取出我们在 loadModel 里存的层级索引
             const lvl = pl.userData.levelIndex ?? 0;
-            const wave = Math.sin(time * 2.0 - lvl * 0.8) * 0.3 + 0.7;  
+
+            // 垂直呼吸波算法：
+            // time * 2.5 控制闪烁速度
+            // lvl * 0.8 控制波浪从下往上传递的延迟感
+            const wave = Math.sin(time * 2.0 - lvl * 0.8) * 0.3 + 0.7; 
+            
             const targetPLIntensity = plBaseIntensity * wave;
 
+            // 平滑过渡
             pl.intensity = THREE.MathUtils.lerp(pl.intensity, targetPLIntensity, 0.1);
         });
     }
 
-    // light animation for lights on the bridge 
+    // === 桥梁点光源动画 (噪声 + 物理光照) ===
     if (o.userData.type === 'bridge' && o.userData.bridgeLights) {
-        const bridgeBaseIntensity = (isSunset * 0.2 + isNight * 1.0) * 30000.0;
+        
+        // 基础亮度: 
+        // 因为 Decay=2 且范围大，需要很高的强度。
+        // 参考东京塔用了 50000，这里给 30000 左右
+        const bridgeBaseIntensity = (isSunset * 0.2 + isNight * 1.0) * 50000.0;
 
         o.userData.bridgeLights.forEach((pl) => {
+            // 白天关灯
             if (bridgeBaseIntensity < 100) {
                 pl.intensity = 0;
                 return;
@@ -744,43 +773,34 @@ function animate() {
 
             const seed = pl.userData.noiseSeed;
             const t = time; 
-    
-            // Flicker
+
+            // === 噪声算法 (让路灯看起来有年代感) ===
+            
+            // 1. 接触不良 (Flicker): 模拟灯泡滋滋响的高频闪烁
+            // 用 sin 的高频组合
             const flicker = Math.sin(t * 20.0 + seed) * 0.1 + 0.9;
 
-            // Slow pause
+            // 2. 电压不稳 (Slow Pulse): 缓慢的明暗变化
             const pulse = Math.sin(t * 1.0 + seed * 0.5) * 0.2 + 0.8;
 
-            // Glitch
+            // 3. 故障 (Glitch): 偶尔随机灭一下
+            // 只有当随机值 > 0.96 时才熄灭，模拟偶尔断电
             const randomVal = Math.sin(t * 5.0 + seed * 13.0);
             const glitch = randomVal > 0.96 ? 0.0 : 1.0;
 
+            // 综合计算
             const finalIntensity = bridgeBaseIntensity * flicker * pulse * glitch;
+
+            // 平滑更新 (模拟灯丝热惰性)
             pl.intensity = THREE.MathUtils.lerp(pl.intensity, finalIntensity, 0.2);
         });
-    }
-
-    // Light animation for yacht
-    if (o.userData.type === 'yacht') {
-        const pivot = o.userData.searchLightPivot;
-        const light = o.userData.searchLight;
-
-        if (pivot && light) {
-            pivot.rotation.y += 0.015;
-
-            // change over the time
-            const hue = (time * 0.1) % 1.0; 
-            light.color.setHSL(hue, 1.0, 0.5);
-
-            const targetIntensity = isNight ? 30000 : 0; 
-            light.intensity = THREE.MathUtils.lerp(light.intensity, targetIntensity, 0.05);
-        }
     }
 
     if (o.isMesh) {
       const mats = Array.isArray(o.material) ? o.material : [o.material];
       for (const m of mats) {
-
+        // 跳过普通建筑 (因为它们已经被上面的 cityLightUniforms 接管了)
+        // 只有塔和桥需要在这里手动更新 Emissive
         if (!m.userData.lightType) continue;
 
         if (m.userData.lightType === 'tower') {
@@ -795,6 +815,7 @@ function animate() {
     }
   });
 
+  // === 5. 渲染画面 (绝对不能少) ===
   renderer.render( scene, camera );
 }
 
@@ -1158,12 +1179,13 @@ function loadModel(url, position, scale = 1, rotationY = 0) {
         }
       });
 
-      // for different types use different light effect
+      // ============================================
+      // 5. 核心逻辑：类型判断与光效绑定
+      // ============================================
       const urlLower = url.toLowerCase();
       
       const isTower = urlLower.includes('tokyo_tower');
       const isBridge = urlLower.includes('bridge');
-      const isYacht = urlLower.includes('yacht');
       const isBuilding = !isTower && !isBridge && (
         urlLower.includes('building') || 
         urlLower.includes('hotel') || 
@@ -1172,19 +1194,37 @@ function loadModel(url, position, scale = 1, rotationY = 0) {
         urlLower.includes('mori')
       );
 
-      // Tokyo Tower
+      // --- A. 东京塔逻辑 ---
       if (isTower) {
         group.userData.type = 'tower';
         group.userData.isTokyoTower = true;
 
+        // 1. 内部点光源 (修正版：位于表面 + 多层级)
         const towerLights = [];
-
-        // 5 levels of lights
+        
+        // 定义光照层级配置：
+        // y: 高度, radius: 该高度下的塔身半径(估算), color: 灯光颜色
+        // 真实东京塔照明：下部偏暖橙色，上部偏红
+        // === 紧身版配置：收缩半径，让灯光贴合钢架 ===
         const levels = [
+          // 1. 塔基 (Y=2): 
+          // 原始半宽约 5.1，之前设 6.0 偏大。
+          // 改为 3.8，让灯光位于塔腿内侧，照亮钢架核心
           { y: 2.0,  radius: 3.8, color: 0xff7700, dist: 35 }, 
+          
+          // 2. 下层结构 (Y=7): 
+          // 稍微往里收，模拟塔身内凹的曲线
           { y: 7.0,  radius: 3.0, color: 0xff6600, dist: 30 }, 
+          
+          // 3. 大瞭望台下方 (Y=11.5): 
+          // 这里的塔身已经明显变细
           { y: 11.5, radius: 2.0, color: 0xff5500, dist: 25 }, 
+          
+          // 4. 上层结构 (Y=16.5): 
           { y: 16.5, radius: 1.0, color: 0xff4400, dist: 25 }, 
+          
+          // 5. 塔尖 (Y=21): 
+          // 几乎要贴在一起了
           { y: 21.0, radius: 0.4, color: 0xff2200, dist: 20 } 
         ];
 
@@ -1196,13 +1236,23 @@ function loadModel(url, position, scale = 1, rotationY = 0) {
                 {x: -lvl.radius, z: -lvl.radius}
             ];
             
-            // attributes adjustment
             offsets.forEach((off) => {
+                // 1. 距离: 确保覆盖范围足够大
+                // 建议把之前的 dist 值也都改大一倍 (比如 160 -> 300)
                 const range = lvl.dist * scale; 
+                
+                // 2. 强度: 这里初始设为 0 没问题，animate 会覆盖它
+                // 3. 衰减: decay 设为 2 是物理真实效果（光中心极亮，边缘暗）
+                //    如果你想要那种"整个被照亮"的非物理效果，可以设为 1
                 const pl = new THREE.PointLight(lvl.color, 0, range, 2.0);
                 
                 pl.position.set(off.x, lvl.y, off.z);
                 pl.userData.levelIndex = levelIndex; 
+
+                // === 【调试神器】添加辅助线 ===
+                // 如果还看不见，取消下面这行的注释，它会画出灯在哪里，以及照多远
+                // const helper = new THREE.PointLightHelper(pl, 5.0); 
+                // scene.add(helper); // 注意：helper最好直接加到scene里，因为加在group里会被scale影响变得巨大
 
                 group.add(pl);
                 towerLights.push(pl);
@@ -1210,7 +1260,7 @@ function loadModel(url, position, scale = 1, rotationY = 0) {
         });
         group.userData.towerPointLights = towerLights;
 
-        // Sprite
+        // 2. 辉光 Sprite (保持不变)
         const glow = createSunSprite();               
         glow.scale.set(220, 220, 1);                  
         glow.material.depthWrite = false;
@@ -1221,23 +1271,25 @@ function loadModel(url, position, scale = 1, rotationY = 0) {
         group.userData.towerGlow = glow;             
       }
       
-      // Bridge
+      // --- B. 桥梁逻辑 (10个点光源版) ---
       if (isBridge) {
         group.userData.type = 'bridge';
         
+        // 1. 测量桥梁
         const box = new THREE.Box3().setFromObject(model);
         const size = new THREE.Vector3();
         box.getSize(size);
         const center = new THREE.Vector3();
         box.getCenter(center);
         
-        // confirm direction
+        // 2. 确定铺设方向 (自动适配 X 或 Z)
         const isAlongX = size.x > size.z;
         const length = isAlongX ? size.x : size.z;
         
-        // generate 10 lights over the bridge
-        const lightCount = 10; 
+        // 3. 配置参数
+        const lightCount = 10; // 【关键】只创建10个，性能无压力
         
+        // 缩进一点，不要铺到桥头外面去
         const padding = length * 0.1; 
         const startPos = (-length / 2) + padding;
         const totalLen = length - (padding * 2);
@@ -1247,74 +1299,67 @@ function loadModel(url, position, scale = 1, rotationY = 0) {
 
         for (let i = 0; i < lightCount; i++) {
             const currentPos = startPos + i * step;
+            
+            // 范围: 80 (确保两个灯之间的路面能被照亮)
+            // Decay: 2.0 (物理衰减)
             const range = 80 * scale; 
             
-            // color: white
+            // 颜色: 冷白路灯
             const pl = new THREE.PointLight(0xaaccff, 0, range, 2.0);
 
+            // 位置设置: 沿着长轴铺设
+            // yOffset = 15: 悬浮在桥面上方，像路灯一样
             const yOffset = 15; 
             
             if (isAlongX) {
+                // 沿 X 轴铺
                 pl.position.set(currentPos, center.y + yOffset, center.z);
             } else {
+                // 沿 Z 轴铺 (你的情况应该是这里)
                 pl.position.set(center.x, center.y + yOffset, currentPos);
             }
 
+            // 给每个灯一个随机种子，让它们闪烁步调不一样
             pl.userData.noiseSeed = Math.random() * 1000.0;
             
             group.add(pl);
             bridgeLights.push(pl);
+            
+            // 调试辅助 (如果还看不见，取消下面这行的注释)
+            scene.add(new THREE.PointLightHelper(pl, 10));
         }
         
         group.userData.bridgeLights = bridgeLights;
+        
+        // 移除之前的 Shader 灯带引用 (防止动画报错)
+        group.userData.bridgeStrip = null;
       }
 
-      // buildibngs
+      // --- C. 建筑逻辑 ---
       if (isBuilding) group.userData.type = 'building';
 
-      // yacht
-      if (isYacht) {
-        group.userData.type = 'yacht';
-        
-        const pivot = new THREE.Object3D();
-        pivot.position.set(0, 300, 0); 
-        group.add(pivot);
-
-        const spotLight = new THREE.SpotLight(0xffffff, 0, 3000, 0.6, 0.2, 2.0);
-        
-        // Initialize with random color
-        spotLight.color.setHSL(Math.random(), 1.0, 0.5);
-
-        spotLight.position.set(0, 0, 0); 
-        spotLight.castShadow = false;
-        spotLight.shadow.bias = -0.0001;
-        spotLight.shadow.mapSize.set(1024, 1024);
-        
-        const target = new THREE.Object3D();
-        target.position.set(0, -500, 800); 
-        
-        pivot.add(target);
-        spotLight.target = target;
-        pivot.add(spotLight);
-
-        group.userData.searchLightPivot = pivot;
-        group.userData.searchLight = spotLight;
-      }
-
-      // Matiral Initialization
+      // --- D. 材质初始化 ---
       model.traverse((o) => {
         if (!o.isMesh) return;
         const mats = Array.isArray(o.material) ? o.material : [o.material];
 
         for (const m of mats) {
+          // 确保是标准材质
           if (!m || !(m.isMeshStandardMaterial || m.isMeshPhysicalMaterial)) continue;
           
+          // 初始化自发光
           m.emissive = new THREE.Color(0x000000);
           m.emissiveIntensity = 0.0; 
 
           if (isTower) {
              m.userData.lightType = 'tower';
              m.emissiveIntensity = 0.0; 
+             
+            //  // === 【第一板斧：强制修改材质在这里！】 ===
+            //  // 必须写在这个循环里，因为 m 是在这里定义的
+            //  m.metalness = 0.1; // 降低金属感
+            //  m.roughness = 0.4; // 增加光泽度
+             
           } else if (isBridge) {
              m.userData.lightType = 'bridge';
              m.emissiveIntensity = 1.0; 
