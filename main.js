@@ -400,7 +400,7 @@ function ensureStars(){
       uOpacity: { value: 0.0 },       
       uPixelRatio: { value: renderer.getPixelRatio() },
       uTime: { value: 0.0 },
-      uTwinkle: { value: 0.9 },
+      uTwinkle: { value: 1.2 },
     },
     vertexShader: `
       precision highp float;
@@ -683,9 +683,9 @@ function animate() {
   const time = performance.now() * 0.001; 
 
   // decide time
-  const isNight  = THREE.MathUtils.smoothstep(0.0, 0.5, current.stars); 
-  const isSunset = (1.0 - isNight) * THREE.MathUtils.smoothstep(5.0, 0.0, current.elev); 
-
+  const isNight = 1.0 - THREE.MathUtils.smoothstep(current.elev, -6.0, 5.0); 
+  const isHighDay = THREE.MathUtils.smoothstep(current.elev, 5.0, 25.0);
+  const isSunset = (1.0 - isNight) * (1.0 - isHighDay);
   // light effect for windows of buildings
   cityLightUniforms.uTime.value = time;
   const targetBuildingIntensity = (isSunset * 0.5 + isNight * 1.5);
@@ -713,7 +713,7 @@ function animate() {
 
   scene.traverse((o) => {
     if (o.userData.type === 'tower' && o.userData.towerGlow) {
-      o.userData.towerGlow.material.opacity = towerIntensity * 0.6;
+      o.userData.towerGlow.material.opacity = towerIntensity * 0.25;
       o.userData.towerGlow.material.color.copy(towerTargetColor);
     }
 
@@ -772,7 +772,7 @@ function animate() {
             const hue = (time * 0.1) % 1.0; 
             light.color.setHSL(hue, 1.0, 0.5);
 
-            const targetIntensity = isNight ? 30000 : 0; 
+            const targetIntensity = (isNight > 0.1) ? 50000 : 0; 
             light.intensity = THREE.MathUtils.lerp(light.intensity, targetIntensity, 0.05);
         }
     }
@@ -1127,7 +1127,7 @@ function loadModel(url, position, scale = 1, rotationY = 0) {
           }
         });
         const glow = createSunSprite();               
-        glow.scale.set(220, 220, 1);                  
+        glow.scale.set(120, 120, 1);                  
         glow.material.depthWrite = false;
         glow.material.opacity = 0.0;                  
         glow.renderOrder = 999;
