@@ -66,7 +66,7 @@ function enhanceCityMaterial(material) {
           float noise = random(grid);
           float flicker = sin(uTime * 0.5 + noise * 6.0) * 0.5 + 0.5;
           float isLit = step(0.4, noise); 
-          vec3 windowLight = uWindowColor * windowShape * isLit * uLightIntensity;
+          vec3 windowLight = uWindowColor * windowShape * isLit * uLightIntensity * 3.0;
           totalEmissiveRadiance += windowLight;
         }
       }
@@ -218,6 +218,7 @@ skyUniforms['mieDirectionalG'].value = 0.8;
 const sun = new THREE.Vector3();
 
 function createSunSprite() {
+
   const size = 256;
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = size;
@@ -621,24 +622,24 @@ function setTimeOfDay(mode) {
     startTransition({
       exposure: 0.22,   
       amb: 0.05,        
-      sunInt: 0.08,     
-      sunKelvin: 9000,  
-      turbidity: 1.2,
-      rayleigh: 0.02,
-      mieC: 0.0002,
+      sunInt: 0.01,     
+      sunKelvin: 10000,  
+      turbidity: 1.0,
+      rayleigh: 0.0,
+      mieC: 0.0,
       mieG: 0.7,
-      elev: -25,
+      elev: -20,
       azim: 180,
-      hemiInt: 0.08,                 
-      hemiSky: new THREE.Color(0x6a88ff),    
-      hemiGround: new THREE.Color(0x090b12), 
+      hemiInt: 0.05,                 
+      hemiSky: new THREE.Color(0x05081a),    
+      hemiGround: new THREE.Color(0x000000), 
       stars: 1.0,
       fogDensity: 0.0004,
       fogColor: new THREE.Color(0x0b1020),
     }, 3.0);
 
   
-    lighting.ibl = 0.03;  
+    lighting.ibl = 0.01;  
   }
 }
 
@@ -682,9 +683,8 @@ function animate() {
   const time = performance.now() * 0.001; 
 
   // decide time
-  const isNight = THREE.MathUtils.smoothstep(current.stars, 0.0, 0.5); 
-  const isSunset = (1.0 - isNight) * THREE.MathUtils.smoothstep(10 - current.elev, 0.0, 5.0); 
-  // const isDay = 1.0 - Math.max(isNight, isSunset); 
+  const isNight  = THREE.MathUtils.smoothstep(0.0, 0.5, current.stars); 
+  const isSunset = (1.0 - isNight) * THREE.MathUtils.smoothstep(5.0, 0.0, current.elev); 
 
   // light effect for windows of buildings
   cityLightUniforms.uTime.value = time;
@@ -796,6 +796,7 @@ function animate() {
   });
 
   renderer.render( scene, camera );
+  
 }
 
 function updateSkyAndLights() {
@@ -825,13 +826,6 @@ function updateSkyAndLights() {
     current.sunKelvin = lerp(a.sunKelvin ?? 6500, b.sunKelvin ?? 6500, t);
 
 
-    const elev01 = THREE.MathUtils.clamp((current.elev + 5) / 25, 0, 1); 
-    const warmBias = 1.0 - elev01; 
-    const biasedKelvin = current.sunKelvin * (1.0 - 0.35 * warmBias); 
-
-    current.sunColor.copy(kelvinToRGB(biasedKelvin));
-
-
     current.stars = lerp(a.stars, b.stars, t);
 
     current.hemiInt = lerp(a.hemiInt, b.hemiInt, t);
@@ -845,6 +839,23 @@ function updateSkyAndLights() {
     if (t === 1) transition = null;
   }
 
+ 
+  
+  const elev = current.elev;
+  const nearHorizon = 1.0 - THREE.MathUtils.smoothstep(elev, 8.0, 25.0);
+  const notDeepNight = THREE.MathUtils.smoothstep(elev, -18.0, -8.0);
+  const sunsetT = THREE.MathUtils.clamp(nearHorizon * notDeepNight, 0.0, 1.0);
+
+
+  
+  const biasedKelvin = THREE.MathUtils.lerp(
+    current.sunKelvin,
+    current.sunKelvin * 0.65,
+    sunsetT
+  );
+  current.sunColor.copy(kelvinToRGB(biasedKelvin));
+
+
   // apply to renderer/lights/sky
   renderer.toneMappingExposure = current.exposure;
 
@@ -852,9 +863,8 @@ function updateSkyAndLights() {
   directionalLight.intensity = current.sunInt;
   directionalLight.color.copy(current.sunColor);
   {
-    const elev01 = THREE.MathUtils.clamp((current.elev + 5) / 25, 0, 1);
     const sunsetTint = new THREE.Color(1.0, 0.78, 0.58);
-    const tintStrength = (1.0 - elev01) * 0.35; // tweak 0.25~0.5
+    const tintStrength = 0.35 * sunsetT; // only near sunset
     directionalLight.color.lerp(sunsetTint, tintStrength);
   }
   
@@ -870,7 +880,7 @@ function updateSkyAndLights() {
   } else {
     scene.fog = null;
   }
-
+  
   skyUniforms['turbidity'].value = current.turbidity;
   skyUniforms['rayleigh'].value = current.rayleigh;
   skyUniforms['mieCoefficient'].value = current.mieC;
@@ -956,7 +966,7 @@ function updateSkyAndLights() {
     if (glow) glow.quaternion.copy(camera.quaternion);
   });
 
-
+  
 }
 
 
@@ -1321,6 +1331,7 @@ function loadModel(url, position, scale = 1, rotationY = 0) {
           } else if (isBuilding) {
              m.userData.lightType = 'building';
              enhanceCityMaterial(m); 
+             
           }
         }
       });
@@ -1381,6 +1392,68 @@ function loadModel(url, position, scale = 1, rotationY = 0) {
   );
 }
 
+function dumpLights(){
+  const lights = [];
+  scene.traverse(o=>{
+    if (!o.isLight) return;
+    lights.push({
+      uuid: o.uuid.slice(0,8),
+      type: o.type,
+      intensity: o.intensity,
+      color: o.color ? `#${o.color.getHexString()}` : '',
+      distance: (o.distance ?? ''),
+      decay: (o.decay ?? ''),
+      name: o.name || '',
+      tag: o.userData?.type || '',
+      isTower: !!o.userData?.isTokyoTower,
+      lvl: o.userData?.levelIndex ?? '',
+    });
+  });
+
+  lights.sort((a,b)=>(b.intensity||0)-(a.intensity||0));
+  console.table(lights);
+  console.log('Top5', lights.slice(0,5));
+}
+
+window.addEventListener('keydown', (e)=>{
+  if (e.key.toLowerCase()==='l') dumpLights();
+});
+const lightHelpers = [];
+function toggleLightHelpers(on){
+  // 清掉舊的
+  for (const h of lightHelpers) scene.remove(h);
+  lightHelpers.length = 0;
+
+  if (!on) return;
+
+  scene.traverse(o=>{
+    if (!o.isLight) return;
+    const h = new THREE.PointLightHelper(o, 5);
+    if (o.isSpotLight) {
+      const hh = new THREE.SpotLightHelper(o);
+      scene.add(hh);
+      lightHelpers.push(hh);
+      return;
+    }
+    if (o.isDirectionalLight) {
+      const hh = new THREE.DirectionalLightHelper(o, 20);
+      scene.add(hh);
+      lightHelpers.push(hh);
+      return;
+    }
+    // PointLight
+    scene.add(h);
+    lightHelpers.push(h);
+  });
+}
+
+let showLH = false;
+window.addEventListener('keydown', (e)=>{
+  if (e.key.toLowerCase()==='h'){
+    showLH = !showLH;
+    toggleLightHelpers(showLH);
+  }
+});
 
 
 // ============================================
