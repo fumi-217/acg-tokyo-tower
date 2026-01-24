@@ -695,7 +695,7 @@ function animate() {
 
   // color change
   if (isSunset > 0.5) {
-     cityLightUniforms.uWindowColor.value.setHex(0xffaa55); 
+     cityLightUniforms.uWindowColor.value.setHex(0xffd8a8); 
   } else {
      cityLightUniforms.uWindowColor.value.setHex(0xffddaa); 
   }
