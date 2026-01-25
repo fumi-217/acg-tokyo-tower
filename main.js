@@ -1018,6 +1018,11 @@ function loadModel(url, position, scale = 1, rotationY = 0) {
       return requestedURL;
     }
 
+    // If already starts with baseDir, don't prepend again
+    if (requestedURL.startsWith(baseDir)) {
+      return requestedURL;
+    }
+
     // Resolve relative paths against model directory
     const fixed = baseDir + requestedURL;
 
