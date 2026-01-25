@@ -1025,7 +1025,6 @@ function loadModel(url, position, scale = 1, rotationY = 0) {
   });
 
   const loader = new GLTFLoader(manager);
-  loader.setResourcePath(baseDir);
 
   loader.load(
     url,
