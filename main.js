@@ -5,9 +5,6 @@ import {Sky} from 'three/addons/objects/Sky.js';
 import {Water} from 'three/addons/objects/Water.js';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 
-// Base URL for assets (handles GitHub Pages subdirectory)
-const BASE_URL = import.meta.env.BASE_URL;
-
 // Global Uniforms, used in building light effect control
 const cityLightUniforms = {
   uTime: { value: 0.0 },
@@ -146,7 +143,7 @@ let envMap = null;
 const lighting = { ibl: 1.2 }; 
 
 new RGBELoader()
-  .setPath(BASE_URL + 'hdr/')
+  .setPath('hdr/')
   .load('kloofendal_48d_partly_cloudy_puresky_4k.hdr', (hdrTex) => {
     envMap = pmrem.fromEquirectangular(hdrTex).texture;
     hdrTex.dispose();
@@ -286,7 +283,7 @@ const waveSpeed = 0.03;
 
 const waterGeometry = new THREE.PlaneGeometry(waterWidth, waterDepth);
 
-const waterNormals = new THREE.TextureLoader().load(BASE_URL + 'textures/Water_1_M_Normal.jpg', (tex) => {
+const waterNormals = new THREE.TextureLoader().load('textures/Water_1_M_Normal.jpg', (tex) => {
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.repeat.set(2, 2);      
   tex.offset.set(0, 0);      
@@ -1466,35 +1463,35 @@ window.addEventListener('keydown', (e)=>{
 // ============================================
 
 // Tokyo Tower - centered at origin, larger scale
-loadModel(BASE_URL + 'models/tokyo_tower/scene.gltf', new THREE.Vector3(0, 0, 0), 12);
+loadModel('models/tokyo_tower/scene.gltf', new THREE.Vector3(0, 0, 0), 12);
 
 // Office buildings arranged around the tower
-loadModel(BASE_URL + 'models/anime_style_-_office_building/scene.gltf', new THREE.Vector3(10, 0, 60), 0.25, Math.PI * 1.9);
-loadModel(BASE_URL + 'models/building_no_6_form_tokyo_otemachi_building_pack_gltf/scene.gltf', new THREE.Vector3(-5, 0, 40), 0.6);
-loadModel(BASE_URL + 'models/building_no_19_form_tokyo_otemachi_building_pack_gltf/scene.gltf', new THREE.Vector3(-30, 0, 30), 0.5);
-loadModel(BASE_URL + 'models/building_no_6_form_tokyo_otemachi_building_pack_gltf/scene.gltf', new THREE.Vector3(120, 0, 40), 0.6);
-loadModel(BASE_URL + 'models/building_no_19_form_tokyo_otemachi_building_pack_gltf/scene.gltf', new THREE.Vector3(-180, 0, -80), 0.9);
+loadModel('models/anime_style_-_office_building/scene.gltf', new THREE.Vector3(10, 0, 60), 0.25, Math.PI * 1.9);
+loadModel('models/building_no_6_form_tokyo_otemachi_building_pack_gltf/scene.gltf', new THREE.Vector3(-5, 0, 40), 0.6);
+loadModel('models/building_no_19_form_tokyo_otemachi_building_pack_gltf/scene.gltf', new THREE.Vector3(-30, 0, 30), 0.5);
+loadModel('models/building_no_6_form_tokyo_otemachi_building_pack_gltf/scene.gltf', new THREE.Vector3(120, 0, 40), 0.6);
+loadModel('models/building_no_19_form_tokyo_otemachi_building_pack_gltf/scene.gltf', new THREE.Vector3(-180, 0, -80), 0.9);
 
 // High-rise buildings scattered around
-loadModel(BASE_URL + 'models/hi_rise_apartment_building/scene.gltf', new THREE.Vector3(100, 0, -10), 0.007);
-loadModel(BASE_URL + 'models/high_rise_building_gltf/scene.gltf', new THREE.Vector3(60, 0, -10), 1);
-loadModel(BASE_URL + 'models/le_millefiori/scene_mr.gltf', new THREE.Vector3(-120, 0, -40), 0.02);
+loadModel('models/hi_rise_apartment_building/scene.gltf', new THREE.Vector3(100, 0, -10), 0.007);
+loadModel('models/high_rise_building_gltf/scene.gltf', new THREE.Vector3(60, 0, -10), 1);
+loadModel('models/le_millefiori/scene_mr.gltf', new THREE.Vector3(-120, 0, -40), 0.02);
 
 
 // Hotels with various rotations
-loadModel(BASE_URL + 'models/marriott_hotel_3_wtc_gltf/scene.gltf', new THREE.Vector3(120, 0, -50), 0.4, Math.PI * 1.3);
-loadModel(BASE_URL + 'models/marriott_hotel_3_wtc_gltf/scene.gltf', new THREE.Vector3(-130, 0, 30), 0.25, Math.PI / 3);
+loadModel('models/marriott_hotel_3_wtc_gltf/scene.gltf', new THREE.Vector3(120, 0, -50), 0.4, Math.PI * 1.3);
+loadModel('models/marriott_hotel_3_wtc_gltf/scene.gltf', new THREE.Vector3(-130, 0, 30), 0.25, Math.PI / 3);
 
 // Mori building
-loadModel(BASE_URL + 'models/mori_building/MoriBuilding.glb', new THREE.Vector3(-90, 0, -80), 0.62, Math.PI / 3);
+loadModel('models/mori_building/MoriBuilding.glb', new THREE.Vector3(-90, 0, -80), 0.62, Math.PI / 3);
 
 // Yacht in water area
-loadModel(BASE_URL + 'models/yacht/scene.gltf', new THREE.Vector3(-5, 0, 340), 0.01, Math.PI * 1.3);
+loadModel('models/yacht/scene.gltf', new THREE.Vector3(-5, 0, 340), 0.01, Math.PI * 1.3);
 
 // Manhattan bridges on sides (elevated Y=20)
-loadModel(BASE_URL + 'models/lowpoly_manhattan_bridge_gltf/scene.gltf', new THREE.Vector3(170, 20, 170), 0.57, Math.PI / 2);
-loadModel(BASE_URL + 'models/lowpoly_manhattan_bridge_gltf/scene.gltf', new THREE.Vector3(-180, 20, 170), 0.57, Math.PI / 2);
+loadModel('models/lowpoly_manhattan_bridge_gltf/scene.gltf', new THREE.Vector3(170, 20, 170), 0.57, Math.PI / 2);
+loadModel('models/lowpoly_manhattan_bridge_gltf/scene.gltf', new THREE.Vector3(-180, 20, 170), 0.57, Math.PI / 2);
 
 // Island in the background (large scale)
-loadModel(BASE_URL + 'models/isla_mocha_national_reserve/scene.gltf', new THREE.Vector3(170, 0, 280), 220, Math.PI / 4);
-loadModel(BASE_URL + 'models/isla_mocha_national_reserve/scene.gltf', new THREE.Vector3(90, 0, 350), 100, Math.PI / 4);
+loadModel('models/isla_mocha_national_reserve/scene.gltf', new THREE.Vector3(170, 0, 280), 220, Math.PI / 4);
+loadModel('models/isla_mocha_national_reserve/scene.gltf', new THREE.Vector3(90, 0, 350), 100, Math.PI / 4);
