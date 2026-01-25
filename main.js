@@ -1003,6 +1003,11 @@ function loadModel(url, position, scale = 1, rotationY = 0) {
 
   // ---------- URL modifier ----------
   manager.setURLModifier((requestedURL) => {
+    // Don't modify the main GLTF file URL
+    if (requestedURL === url) {
+      return requestedURL;
+    }
+
     // Allow embedded and remote resources
     if (/^(data:|blob:|https?:)/i.test(requestedURL)) {
       return requestedURL;
