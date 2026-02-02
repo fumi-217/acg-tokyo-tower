@@ -47,3 +47,5 @@ Thumbs.db
 *.blend1
 *.blend~
 *.tmp
+
+public/models/mori_building/*
