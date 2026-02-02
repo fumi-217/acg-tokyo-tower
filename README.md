@@ -1,4 +1,4 @@
-# Advanced Course in Computer Graphics - Capturing Tokyo Tower
+# ACG - Capturing Tokyo Tower
 
 ## Prerequisites
 - Node.js 18+ installed
