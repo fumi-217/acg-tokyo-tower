@@ -1178,8 +1178,8 @@ function loadModel(url, position, scale = 1, rotationY = 0) {
         urlLower.includes('building') || 
         urlLower.includes('hotel') || 
         urlLower.includes('apartment') || 
-        urlLower.includes('millefiori') ||
-        urlLower.includes('mori')
+        urlLower.includes('millefiori') 
+        // urlLower.includes('mori')
       );
 
       // Tokyo Tower
@@ -1483,7 +1483,7 @@ loadModel('/models/marriott_hotel_3_wtc_gltf/scene.gltf', new THREE.Vector3(120,
 loadModel('/models/marriott_hotel_3_wtc_gltf/scene.gltf', new THREE.Vector3(-130, 0, 30), 0.25, Math.PI / 3);
 
 // Mori building
-loadModel('/models/mori_building/MoriBuilding.glb', new THREE.Vector3(-90, 0, -80), 0.62, Math.PI / 3);
+// loadModel('/models/mori_building/MoriBuilding.glb', new THREE.Vector3(-90, 0, -80), 0.62, Math.PI / 3);
 
 // Yacht in water area
 loadModel('/models/yacht/scene.gltf', new THREE.Vector3(-5, 0, 340), 0.01, Math.PI * 1.3);
